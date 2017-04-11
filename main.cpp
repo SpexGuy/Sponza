@@ -5,8 +5,10 @@
 
 #include <glm/glm.hpp>
 #include <stb/stb_image.h>
+#include "types.h"
 #include "gl_includes.h"
 #include "Perf.h"
+#include "obj.h"
 
 using namespace std;
 using namespace glm;
@@ -22,8 +24,13 @@ void setup() {
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
-    // TODO
-    // init shaders and other global state
+    vector<OBJMaterial> materials;
+    bool success = loadMaterials("assets/sponza/sponza.mtl", materials);
+    if (!success) {
+        printf("Failed to load materials.\n");
+        exit(2);
+    }
+    printf("Loaded %lu materials.\n", materials.size());
 }
 
 void draw() {
