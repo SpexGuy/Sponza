@@ -72,6 +72,39 @@ OBJMesh mesh;
 
 int part = -1;
 
+void optimizeMesh() {
+    if (mesh.meshParts.size() == 0)
+        return; // shouldn't happen but JIC
+
+    stable_sort(mesh.meshParts.begin(), mesh.meshParts.end(),
+                [](const OBJMeshPart &a, const OBJMeshPart &b) {
+        return a.materialIndex < b.materialIndex;
+    });
+
+    vector<u32> newIndices(mesh.indices.size());
+    vector<OBJMeshPart> newMeshParts;
+    u32 currentMaterial = mesh.meshParts[0].materialIndex;
+    u32 pos = 0;
+    newMeshParts.push_back(OBJMeshPart {currentMaterial, pos, 0});
+    for (OBJMeshPart &part : mesh.meshParts) {
+        u32 mat = part.materialIndex;
+        if (mat != currentMaterial) {
+            newMeshParts.back().indexSize = pos - newMeshParts.back().indexOffset;
+            currentMaterial = mat;
+            newMeshParts.push_back(OBJMeshPart {currentMaterial, pos, 0});
+        }
+        memcpy(&newIndices[pos], &mesh.indices[part.indexOffset], part.indexSize * sizeof(u32));
+        pos += part.indexSize;
+    }
+    assert(pos == mesh.indices.size());
+    newMeshParts.back().indexSize = pos - newMeshParts.back().indexOffset;
+
+    printf("Mesh optimized; number of parts reduced from %lu to %lu\n", mesh.meshParts.size(), newMeshParts.size());
+
+    mesh.meshParts = std::move(newMeshParts);
+    mesh.indices = std::move(newIndices);
+}
+
 void setup() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
@@ -85,6 +118,8 @@ void setup() {
     printf("Loaded %lu materials.\n", mesh.materials.size());
     printf("Loaded %lu mesh parts.\n", mesh.meshParts.size());
     printf("Loaded %lu vertices and %lu indices.\n", mesh.verts.size(), mesh.indices.size());
+
+    optimizeMesh();
 
     GLuint shader = compileShader(vert, frag);
     glUseProgram(shader);
