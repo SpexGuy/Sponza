@@ -24,13 +24,15 @@ void setup() {
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
-    vector<OBJMaterial> materials;
-    bool success = loadMaterials("assets/sponza/sponza.mtl", materials);
+    OBJMesh mesh;
+    bool success = loadObjFile("assets/sponza", "sponza.obj", mesh);
     if (!success) {
         printf("Failed to load materials.\n");
         exit(2);
     }
-    printf("Loaded %lu materials.\n", materials.size());
+    printf("Loaded %lu materials.\n", mesh.materials.size());
+    printf("Loaded %lu mesh parts.\n", mesh.meshParts.size());
+    printf("Loaded %lu vertices and %lu indices.\n", mesh.verts.size(), mesh.indices.size());
 }
 
 void draw() {

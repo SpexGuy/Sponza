@@ -50,6 +50,27 @@ struct OBJMaterial {
     MaterialFlags flags;  // OBJ_MTL_* flags. 1 if field is initialized, 0 otherwise.
 };
 
+struct OBJVertex {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 texture;
+};
+
+struct OBJMeshPart {
+    u32 materialIndex;
+    u32 indexOffset;
+    u32 indexSize;
+};
+
+struct OBJMesh {
+    std::vector<OBJMaterial> materials;
+    std::vector<OBJVertex> verts;
+    std::vector<u32> indices;
+    std::vector<OBJMeshPart> meshParts;
+};
+
 bool loadMaterials(const std::string &filename, std::vector<OBJMaterial> &materials);
+
+bool loadObjFile(const std::string &path, const std::string &filename, OBJMesh &mesh);
 
 #endif //SPONZA_OBJ_H
