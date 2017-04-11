@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <glm/glm.hpp>
+#include <glm/gtx/transform.hpp>
 #include <stb/stb_image.h>
 #include "types.h"
 #include "gl_includes.h"
@@ -19,12 +20,63 @@ void loadTexture(GLuint texname, const char *filename);
 GLFWwindow *window;
 
 
+const char *vert = GLSL(
+
+        uniform mat3 normalMat;
+        uniform mat4 mvp;
+
+        in vec3 position;
+        in vec3 normal;
+        in vec2 tex;
+
+        out vec3 f_normal;
+        out vec2 f_tex;
+
+        void main() {
+            // lighting is not realistic. Meant just to distinguish the faces.
+            gl_Position = mvp * vec4(position, 1.0);
+            f_normal = normalMat * normal;
+            f_tex = tex;
+        }
+);
+
+const char *frag = GLSL(
+        const float ambient = 0.2;
+        const vec3 lightDir = normalize(vec3(1,1,1));
+
+        in vec3 f_normal;
+        in vec2 f_tex;
+
+        out vec4 fragColor;
+
+        void main() {
+            vec2 tex = abs(f_tex);
+            float blue2 = 1 - tex.x*tex.x - tex.y*tex.y;
+            vec3 color = vec3(tex, sqrt(max(0, blue2)));
+            float light = dot(normalize(f_normal), lightDir) / 2 + 0.5;
+            light = light + ambient * (1 - light);
+            fragColor = vec4(light * color, 1);
+        }
+);
+
+struct {
+    GLuint normalMat;
+    GLuint mvp;
+} uniforms;
+
+mat4 rotation; // identity
+mat4 view;
+mat4 projection;
+
+OBJMesh mesh;
+
+int part = -1;
+
 void setup() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
-    OBJMesh mesh;
     bool success = loadObjFile("assets/sponza", "sponza.obj", mesh);
     if (!success) {
         printf("Failed to load materials.\n");
@@ -33,18 +85,68 @@ void setup() {
     printf("Loaded %lu materials.\n", mesh.materials.size());
     printf("Loaded %lu mesh parts.\n", mesh.meshParts.size());
     printf("Loaded %lu vertices and %lu indices.\n", mesh.verts.size(), mesh.indices.size());
+
+    GLuint shader = compileShader(vert, frag);
+    glUseProgram(shader);
+    uniforms.mvp = glGetUniformLocation(shader, "mvp");
+    uniforms.normalMat = glGetUniformLocation(shader, "normalMat");
+    checkError();
+
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    GLuint verts, indices;
+    glGenBuffers(1, &verts);
+    glGenBuffers(1, &indices);
+    glBindBuffer(GL_ARRAY_BUFFER, verts);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices);
+    glBufferData(GL_ARRAY_BUFFER, mesh.verts.size() * sizeof(mesh.verts[0]), mesh.verts.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(mesh.indices[0]), mesh.indices.data(), GL_STATIC_DRAW);
+
+    GLuint pos = glGetAttribLocation(shader, "position");
+    GLuint nor = glGetAttribLocation(shader, "normal");
+    GLuint tex = glGetAttribLocation(shader, "tex");
+    glEnableVertexAttribArray(pos);
+    glEnableVertexAttribArray(nor);
+    glEnableVertexAttribArray(tex);
+    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), 0);
+    glVertexAttribPointer(nor, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) sizeof(vec3));
+    glVertexAttribPointer(tex, 2, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) (sizeof(vec3) * 2));
+    checkError();
+
+    view = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
+    rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
 }
 
 void draw() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // TODO
-    // draw things
+    // screw mesh parts, just draw everything.
+    if (part == -1) {
+        glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+    } else {
+        OBJMeshPart &mp = mesh.meshParts[part];
+        glDrawElements(GL_TRIANGLES, mp.indexSize, GL_UNSIGNED_INT, (void *)(mp.indexOffset * sizeof(u32)));
+    }
+}
+
+void updateMatrices() {
+    mat4 mvp = projection * view * rotation;
+    checkError();
+    glUniformMatrix4fv(uniforms.mvp, 1, GL_FALSE, &mvp[0][0]);
+    mat3 normal = mat3(view * rotation);
+    glUniformMatrix3fv(uniforms.normalMat, 1, GL_FALSE, &normal[0][0]);
 }
 
 static void glfw_resize_callback(GLFWwindow *window, int width, int height) {
     printf("resize: %dx%d\n", width, height);
     glViewport(0, 0, width, height);
+    if (height != 0) {
+        float aspect = float(width) / height;
+        projection = perspective(31.f, aspect, 1000.f, 10000.f);
+        updateMatrices();
+    }
 }
 
 static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -56,17 +158,43 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         static bool wireframe = false;
         wireframe = !wireframe;
         glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
+    } else if (key == GLFW_KEY_S) {
+        part++;
+        if (part >= mesh.meshParts.size()) {
+            part = -1;
+        }
     }
 }
 
-static void glfw_click_callback(GLFWwindow *window, int button, int action, int mods) {
-    if (action != GLFW_RELEASE) return;
+vec2 lastMouse = vec2(-1,-1);
 
+static void glfw_click_callback(GLFWwindow *window, int button, int action, int mods) {
     double x, y;
     glfwGetCursorPos(window, &x, &y);
 
-    // TODO
-    // mouse clicks
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) lastMouse = vec2(x, y);
+        else if (action == GLFW_RELEASE) lastMouse = vec2(-1, -1);
+    }
+}
+
+static void glfw_mouse_callback(GLFWwindow *window, double xPos, double yPos) {
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) return;
+    if (lastMouse == vec2(-1,-1)) {
+        lastMouse = vec2(xPos, yPos);
+        return; // can't update this frame, no previous data.
+    } else {
+        vec2 current = vec2(xPos, yPos);
+        vec2 delta = current - lastMouse;
+        if (delta == vec2(0,0)) return;
+
+        vec3 rotationVector = vec3(delta.y, delta.x, 0);
+        float angle = length(delta);
+        rotation = rotate(angle, rotationVector) * rotation;
+        updateMatrices();
+
+        lastMouse = current;
+    }
 }
 
 void glfw_error_callback(int error, const char* description) {
@@ -183,7 +311,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif
-    window = glfwCreateWindow(640, 480, "SpexGuy's GLFW Template", NULL, NULL);
+    window = glfwCreateWindow(640, 480, "Sponza Playground", NULL, NULL);
     if (!window) {
         cout << "Failed to create window" << endl;
         exit(-1);
@@ -191,6 +319,7 @@ int main() {
 
     glfwSetKeyCallback(window, glfw_key_callback);
     glfwSetMouseButtonCallback(window, glfw_click_callback);
+    glfwSetCursorPosCallback(window, glfw_mouse_callback);
 
     glfwMakeContextCurrent(window);
 
