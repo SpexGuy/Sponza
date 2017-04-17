@@ -15,7 +15,7 @@ using namespace std;
 using namespace glm;
 
 GLuint compileShader(const char *vertSrc, const char *fragSrc);
-void loadTexture(GLuint texname, const char *filename);
+int loadTexture(GLuint texname, const char *filename, int format = STBI_default);
 
 GLFWwindow *window;
 
@@ -110,7 +110,7 @@ void loadTextures(string dir) {
         if (tex.texName == UNLOADED) {
             string file = dir + '/' + tex.name;
             glGenTextures(1, &tex.texName);
-            loadTexture(tex.texName, file.c_str());
+            loadTexture(tex.texName, file.c_str(), STBI_rgb);
         }
     }
 }
@@ -313,37 +313,58 @@ GLuint compileShader(const char *vertSrc, const char *fragSrc) {
     return shader;
 }
 
-void loadTexture(GLuint texname, const char *filename) {
+/**
+ * Loads a texture from the filesystem into OpenGL. Returns the number of channels loaded, or 0 on failure.
+ * @param texname
+ * @param filename
+ * @param format
+ * @return
+ */
+int loadTexture(GLuint texname, const char *filename, int format /* = STBI_default */) {
     glBindTexture(GL_TEXTURE_2D, texname);
 
     int width, height, bpp;
-    unsigned char *pixels = stbi_load(filename, &width, &height, &bpp, STBI_default);
+    unsigned char *pixels = stbi_load(filename, &width, &height, &bpp, format);
     if (pixels == nullptr) {
         cout << "Failed to load image " << filename << " (" << stbi_failure_reason() << ")" << endl;
-        return;
+        return 0;
     }
     cout << "Loaded " << filename << ", " << height << 'x' << width << ", comp = " << bpp << endl;
 
-    GLenum format;
+    if (format != STBI_default && format != bpp) {
+        cout << "Changing num channels from " << bpp << " to " << format << endl;
+        bpp = format;
+    }
+
+    GLenum glFormat;
     switch(bpp) {
+        case STBI_grey:
+            glFormat = GL_RED;
+            break;
+        case STBI_grey_alpha:
+            glFormat = GL_RG;
+            break;
         case STBI_rgb:
-            format = GL_RGB;
+            glFormat = GL_RGB;
             break;
         case STBI_rgb_alpha:
-            format = GL_RGBA;
+            glFormat = GL_RGBA;
             break;
         default:
             cout << "Unsupported format: " << bpp << endl;
-            return;
+            stbi_image_free(pixels);
+            return 0;
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, format, GL_UNSIGNED_BYTE, pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, glFormat, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     stbi_image_free(pixels);
+
+    return bpp;
 }
 
 int main() {
