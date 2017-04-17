@@ -35,19 +35,26 @@ struct OBJMaterial {
     f32 Ni;               // Index of refraction
     f32 d;                // Transparency (alpha) (AKA 1-Tr)
     glm::vec3 Tf;         // Transmission filter
-    u16 illum;            // Illumination model (https://en.wikipedia.org/wiki/Wavefront_.obj_file#Basic_materials)
     glm::vec3 Ka;         // Ambient reflectivity. `Ka xyz` and `Ka spectral` are not supported.
     glm::vec3 Kd;         // Diffuse reflectivity. `Kd xyz` and `Kd spectral` are not supported.
     glm::vec3 Ks;         // Specular reflectivity. `Ks xyz` and `Ks spectral` are not supported.
     glm::vec3 Ke;         // Emissive reflectivity. `Ke xyz` and `Ke spectral` are not supported.
-    std::string map_Ka;   // Ambient color texture
-    std::string map_Kd;   // Diffuse color texture
-    std::string map_Ks;   // Specular color texture
-    std::string map_Ke;   // Emissive color texture
-    std::string map_Ns;   // Shininess texture
-    std::string map_d;    // Transparency texture
-    std::string map_bump; // Bump map (normal map)
+    u16 illum;            // Illumination model (https://en.wikipedia.org/wiki/Wavefront_.obj_file#Basic_materials)
+    u16 map_Ka;           // Ambient color texture
+    u16 map_Kd;           // Diffuse color texture
+    u16 map_Ks;           // Specular color texture
+    u16 map_Ke;           // Emissive color texture
+    u16 map_Ns;           // Shininess texture
+    u16 map_d;            // Transparency texture
+    u16 map_bump;         // Bump map (normal map)
     MaterialFlags flags;  // OBJ_MTL_* flags. 1 if field is initialized, 0 otherwise.
+};
+
+const u32 UNLOADED = 0xFFFFFFFF;
+
+struct OBJTexture {
+    std::string name;
+    u32 texName = UNLOADED;
 };
 
 struct OBJVertex {
@@ -63,13 +70,14 @@ struct OBJMeshPart {
 };
 
 struct OBJMesh {
+    std::vector<OBJTexture> textures;
     std::vector<OBJMaterial> materials;
     std::vector<OBJVertex> verts;
     std::vector<u32> indices;
     std::vector<OBJMeshPart> meshParts;
 };
 
-bool loadMaterials(const std::string &filename, std::vector<OBJMaterial> &materials);
+bool loadMaterials(const std::string &filename, OBJMesh &mesh);
 
 bool loadObjFile(const std::string &path, const std::string &filename, OBJMesh &mesh);
 

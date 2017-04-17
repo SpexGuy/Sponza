@@ -34,7 +34,22 @@ void readVec(istream &input, vec3 &vec) {
     input >> vec.r >> vec.g >> vec.b;
 }
 
-bool loadMaterials(const string &filename, vector<OBJMaterial> &materials) {
+void readTex(OBJMesh &mesh, istream &input, u16 &tex) {
+    string texname;
+    input >> texname;
+    for (u32 c = 0, n = mesh.textures.size(); c < n; c++) {
+        if (mesh.textures[c].name == texname) {
+            tex = u16(c);
+            return;
+        }
+    }
+
+    mesh.textures.emplace_back();
+    mesh.textures.back().name = texname;
+    tex = u16(mesh.textures.size() - 1);
+}
+
+bool loadMaterials(const string &filename, OBJMesh &mesh) {
     ifstream input(filename);
     if (!input) {
         printf("Failed to open material file: %s\n", filename.c_str());
@@ -58,8 +73,8 @@ bool loadMaterials(const string &filename, vector<OBJMaterial> &materials) {
         }
 
         if (token == "newmtl") {
-            materials.emplace_back();
-            current = &materials.back();
+            mesh.materials.emplace_back();
+            current = &mesh.materials.back();
             lineReader >> current->name;
         } else {
             if (!current) {
@@ -116,32 +131,33 @@ bool loadMaterials(const string &filename, vector<OBJMaterial> &materials) {
                 readVec(lineReader, current->Ke);
             } else if (token == "map_Ka") {
                 flag = OBJ_MTL_MAP_KA;
-                lineReader >> current->map_Ka;
+                readTex(mesh, lineReader, current->map_Ka);
             } else if (token == "map_Kd") {
                 flag = OBJ_MTL_MAP_KD;
-                lineReader >> current->map_Kd;
+                readTex(mesh, lineReader, current->map_Kd);
             } else if (token == "map_Ks") {
                 flag = OBJ_MTL_MAP_KS;
-                lineReader >> current->map_Ks;
+                readTex(mesh, lineReader, current->map_Ks);
             } else if (token == "map_Ke") {
                 flag = OBJ_MTL_MAP_KE;
-                lineReader >> current->map_Ke;
+                readTex(mesh, lineReader, current->map_Ke);
             } else if (token == "map_Ns") {
                 flag = OBJ_MTL_MAP_NS;
-                lineReader >> current->map_Ns;
+                readTex(mesh, lineReader, current->map_Ns);
             } else if (token == "map_d") {
                 flag = OBJ_MTL_MAP_D;
-                lineReader >> current->map_d;
+                readTex(mesh, lineReader, current->map_d);
             } else if (token == "map_bump" || token == "bump") {
                 if (current->flags & OBJ_MTL_MAP_BUMP) {
-                    string tmp;
-                    lineReader >> tmp;
+                    u16 tmp;
+                    readTex(mesh, lineReader, tmp);
                     if (tmp != current->map_bump) {
                         printf("Warning: multiple bump maps. (material file %s, line %d)\n", filename.c_str(), lineNum);
+                        current->map_bump = tmp;
                     }
                 } else {
                     flag = OBJ_MTL_MAP_BUMP;
-                    lineReader >> current->map_bump;
+                    readTex(mesh, lineReader, current->map_bump);
                 }
             } else {
                 printf("Unknown directive: %s (in file %s, line %d)\n", token.c_str(), filename.c_str(), lineNum);
@@ -197,7 +213,7 @@ bool loadObjFile(const string &cwd, const string &filename, OBJMesh &mesh) {
                 lineStream >> matfile;
                 matfile = cwd + '/' + matfile;
                 printf("Loading material file: %s\n", matfile.c_str());
-                bool success = loadMaterials(matfile, mesh.materials);
+                bool success = loadMaterials(matfile, mesh);
                 if (!success) {
                     printf("Warning: failed to load material library %s\n", matfile.c_str());
                 }
