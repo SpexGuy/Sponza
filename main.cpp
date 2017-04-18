@@ -10,59 +10,14 @@
 #include "gl_includes.h"
 #include "Perf.h"
 #include "obj.h"
+#include "material.h"
 
 using namespace std;
 using namespace glm;
 
-GLuint compileShader(const char *vertSrc, const char *fragSrc);
 int loadTexture(GLuint texname, const char *filename, int format = STBI_default);
 
 GLFWwindow *window;
-
-
-const char *vert = GLSL(
-
-        uniform mat3 normalMat;
-        uniform mat4 mvp;
-
-        in vec3 position;
-        in vec3 normal;
-        in vec2 tex;
-
-        out vec3 f_normal;
-        out vec2 f_tex;
-
-        void main() {
-            // lighting is not realistic. Meant just to distinguish the faces.
-            gl_Position = mvp * vec4(position, 1.0);
-            f_normal = normalMat * normal;
-            f_tex = tex;
-        }
-);
-
-const char *frag = GLSL(
-        const float ambient = 0.2;
-        const vec3 lightDir = normalize(vec3(1,1,1));
-
-        in vec3 f_normal;
-        in vec2 f_tex;
-
-        out vec4 fragColor;
-
-        void main() {
-            vec2 tex = abs(f_tex);
-            float blue2 = 1 - tex.x*tex.x - tex.y*tex.y;
-            vec3 color = vec3(tex, sqrt(max(0, blue2)));
-            float light = dot(normalize(f_normal), lightDir) / 2 + 0.5;
-            light = light + ambient * (1 - light);
-            fragColor = vec4(light * color, 1);
-        }
-);
-
-struct {
-    GLuint normalMat;
-    GLuint mvp;
-} uniforms;
 
 mat4 rotation; // identity
 mat4 view;
@@ -71,6 +26,7 @@ mat4 projection;
 OBJMesh mesh;
 
 int part = -1;
+int renderMode = 0;
 
 void optimizeMesh() {
     if (mesh.meshParts.size() == 0)
@@ -133,15 +89,10 @@ void setup() {
 
     loadTextures("assets/sponza");
 
-    GLuint shader = compileShader(vert, frag);
-    glUseProgram(shader);
-    uniforms.mvp = glGetUniformLocation(shader, "mvp");
-    uniforms.normalMat = glGetUniformLocation(shader, "normalMat");
-    checkError();
-
     GLuint vao;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
+    checkError();
 
     GLuint verts, indices;
     glGenBuffers(1, &verts);
@@ -151,16 +102,7 @@ void setup() {
     glBufferData(GL_ARRAY_BUFFER, mesh.verts.size() * sizeof(mesh.verts[0]), mesh.verts.data(), GL_STATIC_DRAW);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(mesh.indices[0]), mesh.indices.data(), GL_STATIC_DRAW);
 
-    GLuint pos = glGetAttribLocation(shader, "position");
-    GLuint nor = glGetAttribLocation(shader, "normal");
-    GLuint tex = glGetAttribLocation(shader, "tex");
-    glEnableVertexAttribArray(pos);
-    glEnableVertexAttribArray(nor);
-    glEnableVertexAttribArray(tex);
-    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), 0);
-    glVertexAttribPointer(nor, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) sizeof(vec3));
-    glVertexAttribPointer(tex, 2, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) (sizeof(vec3) * 2));
-    checkError();
+    initShaders();
 
     view = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
     rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
@@ -169,21 +111,33 @@ void setup() {
 void draw() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // screw mesh parts, just draw everything.
+    mat4 mvp = projection * view * rotation;
+    mat3 normal = mat3(view * rotation);
+
     if (part == -1) {
-        glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+        if (renderMode == 2) {
+            for (int c = 0, n = mesh.meshParts.size(); c < n; c++) {
+                OBJMeshPart &mp = mesh.meshParts[c];
+                OBJMaterial &mat = mesh.materials[mp.materialIndex];
+                Shader &shader = findShader(mesh, mat); // TODO: Cache this
+                bindShader(shader);
+                bindMaterial(mvp, normal, mesh, mat);
+                glDrawElements(GL_TRIANGLES, mp.indexSize, GL_UNSIGNED_INT, (void *)(mp.indexOffset * sizeof(u32)));
+            }
+        } else {
+            // screw mesh parts, just draw everything.
+            bindShader(getShader(renderMode));
+            bindMaterial(mvp, normal, mesh, mesh.materials[0]);
+            glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+        }
     } else {
         OBJMeshPart &mp = mesh.meshParts[part];
+        OBJMaterial &mat = mesh.materials[mp.materialIndex];
+        Shader &shader = renderMode == 2 ? findShader(mesh, mat) : getShader(renderMode);
+        bindShader(shader);
+        bindMaterial(mvp, normal, mesh, mat);
         glDrawElements(GL_TRIANGLES, mp.indexSize, GL_UNSIGNED_INT, (void *)(mp.indexOffset * sizeof(u32)));
     }
-}
-
-void updateMatrices() {
-    mat4 mvp = projection * view * rotation;
-    checkError();
-    glUniformMatrix4fv(uniforms.mvp, 1, GL_FALSE, &mvp[0][0]);
-    mat3 normal = mat3(view * rotation);
-    glUniformMatrix3fv(uniforms.normalMat, 1, GL_FALSE, &normal[0][0]);
 }
 
 static void glfw_resize_callback(GLFWwindow *window, int width, int height) {
@@ -192,7 +146,6 @@ static void glfw_resize_callback(GLFWwindow *window, int width, int height) {
     if (height != 0) {
         float aspect = float(width) / height;
         projection = perspective(31.f, aspect, 1000.f, 10000.f);
-        updateMatrices();
     }
 }
 
@@ -209,6 +162,11 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         part++;
         if (part >= mesh.meshParts.size()) {
             part = -1;
+        }
+    } else if (key == GLFW_KEY_M) {
+        renderMode++;
+        if (renderMode >= 3) {
+            renderMode = 0;
         }
     }
 }
@@ -238,7 +196,6 @@ static void glfw_mouse_callback(GLFWwindow *window, double xPos, double yPos) {
         vec3 rotationVector = vec3(delta.y, delta.x, 0);
         float angle = length(delta);
         rotation = rotate(angle, rotationVector) * rotation;
-        updateMatrices();
 
         lastMouse = current;
     }
@@ -248,70 +205,6 @@ void glfw_error_callback(int error, const char* description) {
     cerr << "GLFW Error: " << description << " (error " << error << ")" << endl;
 }
 
-void checkShaderError(GLuint shader) {
-    GLint success = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (success) return;
-
-    cout << "Shader Compile Failed." << endl;
-
-    GLint logSize = 0;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logSize);
-    if (logSize == 0) {
-        cout << "No log found." << endl;
-        return;
-    }
-
-    GLchar *log = new GLchar[logSize];
-
-    glGetShaderInfoLog(shader, logSize, &logSize, log);
-
-    cout << log << endl;
-
-    delete[] log;
-}
-
-void checkLinkError(GLuint program) {
-    GLint success = 0;
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (success) return;
-
-    cout << "Shader link failed." << endl;
-
-    GLint logSize = 0;
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logSize);
-    if (logSize == 0) {
-        cout << "No log found." << endl;
-        return;
-    }
-
-    GLchar *log = new GLchar[logSize];
-
-    glGetProgramInfoLog(program, logSize, &logSize, log);
-    cout << log << endl;
-
-    delete[] log;
-}
-
-GLuint compileShader(const char *vertSrc, const char *fragSrc) {
-    GLuint vertex = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex, 1, &vertSrc, nullptr);
-    glCompileShader(vertex);
-    checkShaderError(vertex);
-
-    GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment, 1, &fragSrc, nullptr);
-    glCompileShader(fragment);
-    checkShaderError(fragment);
-
-    GLuint shader = glCreateProgram();
-    glAttachShader(shader, vertex);
-    glAttachShader(shader, fragment);
-    glLinkProgram(shader);
-    checkLinkError(shader);
-
-    return shader;
-}
 
 /**
  * Loads a texture from the filesystem into OpenGL. Returns the number of channels loaded, or 0 on failure.

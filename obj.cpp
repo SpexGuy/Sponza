@@ -83,7 +83,7 @@ bool loadMaterials(const string &filename, OBJMesh &mesh) {
             }
 
             // Parse token
-            MaterialFlags flag = 0;
+            OBJMaterialFlags flag = 0;
             if (token == "Ns") {
                 flag = OBJ_MTL_NS;
                 lineReader >> current->Ns;

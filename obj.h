@@ -27,7 +27,7 @@
 #define OBJ_MTL_MAP_NS (1<<13)
 #define OBJ_MTL_MAP_D (1<<14)
 #define OBJ_MTL_MAP_BUMP (1<<15)
-typedef u32 MaterialFlags;
+typedef u32 OBJMaterialFlags;
 
 struct OBJMaterial {
     std::string name;     // The tag for the material, after newmtl
@@ -47,7 +47,7 @@ struct OBJMaterial {
     u16 map_Ns;           // Shininess texture
     u16 map_d;            // Transparency texture
     u16 map_bump;         // Bump map (normal map)
-    MaterialFlags flags;  // OBJ_MTL_* flags. 1 if field is initialized, 0 otherwise.
+    OBJMaterialFlags flags;  // OBJ_MTL_* flags. 1 if field is initialized, 0 otherwise.
 };
 
 const u32 UNLOADED = 0xFFFFFFFF;
