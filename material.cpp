@@ -157,9 +157,9 @@ void diffuseTexBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const
     }
 
     if (material.flags & OBJ_MTL_KD) {
-        glUniform3f(diffuseTexUniforms.ambientFilter, material.Kd.r, material.Kd.g, material.Kd.b);
+        glUniform3f(diffuseTexUniforms.diffuseFilter, material.Kd.r, material.Kd.g, material.Kd.b);
     } else {
-        glUniform3f(diffuseTexUniforms.ambientFilter, 1,1,1);
+        glUniform3f(diffuseTexUniforms.diffuseFilter, 1,1,1);
     }
 }
 // ------------------ End Shader Uniforms -------------------
@@ -289,15 +289,20 @@ bool validTexture(const OBJMesh &mesh, u32 texName) {
 }
 
 Shader &findShader(const OBJMesh &mesh, const OBJMaterial &material) {
-    bool ka = !!(material.flags & OBJ_MTL_KA);
-    bool kd = !!(material.flags & OBJ_MTL_KD);
+    bool ka = (material.flags & OBJ_MTL_MAP_KA) != 0;
+    bool kd = (material.flags & OBJ_MTL_MAP_KD) != 0;
+    bool bump = (material.flags & OBJ_MTL_MAP_BUMP) != 0;
 
-    if (ka && !validTexture(mesh, material.map_Ka)) return shaders[kTexCoord];
-    if (kd && !validTexture(mesh, material.map_Kd)) return shaders[kTexCoord];
+    if (ka && !validTexture(mesh, material.map_Ka)) return shaders[kNormal];
+    if (kd && !validTexture(mesh, material.map_Kd)) return shaders[kNormal];
+    if (bump && !validTexture(mesh, material.map_bump)) return shaders[kNormal];
+
+//    if (ka && kd && bump) return shaders[kBumpTex];
+//    else if (bump) return shaders[kNormal];
 
     if (ka && kd) return shaders[kDiffuseTex];
 
-    return shaders[kTexCoord];
+    return shaders[kNormal];
 }
 
 void bindShader(const Shader &shader) {
