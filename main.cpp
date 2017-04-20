@@ -70,7 +70,10 @@ void loadTextures(string dir) {
         if (tex.texName == UNLOADED) {
             string file = dir + '/' + tex.name;
             glGenTextures(1, &tex.texName);
-            loadTexture(tex.texName, file.c_str(), STBI_rgb);
+            if (!loadTexture(tex.texName, file.c_str(), STBI_rgb)) {
+                glDeleteTextures(1, &tex.texName);
+                tex.texName = UNLOADED;
+            }
         }
     }
 }
