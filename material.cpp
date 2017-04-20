@@ -9,6 +9,12 @@
 using namespace glm;
 
 
+struct Shader {
+    GLuint program;
+    void (*bindUniforms)(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material);
+};
+
+
 // ------------------- Begin Shader Text ----------------------
 
 const char *vert = GLSL(
@@ -130,37 +136,27 @@ inline void bindUniformsBase(const U &uniforms, const glm::mat4 &mvp, const glm:
     glUniformMatrix3fv(uniforms.normalMat, 1, GL_FALSE, &normal[0][0]);
 }
 
-void texCoordBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const OBJMesh &mesh, const OBJMaterial &material) {
+void texCoordBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
     bindUniformsBase(texCoordUniforms, mvp, normal);
 }
 
-void diffuseTexBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const OBJMesh &mesh, const OBJMaterial &material) {
+void diffuseTexBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
     bindUniformsBase(diffuseTexUniforms, mvp, normal);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Ka].texName);
+    glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Ka].glHandle);
     glUniform1i(diffuseTexUniforms.ambientTex, 0);
 
     if (material.map_Ka == material.map_Kd) {
         glUniform1i(diffuseTexUniforms.diffuseTex, 0);
     } else {
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Kd].texName);
+        glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Kd].glHandle);
         glUniform1i(diffuseTexUniforms.diffuseTex, 1);
     }
 
-
-    if (material.flags & OBJ_MTL_KA) {
-        glUniform3f(diffuseTexUniforms.ambientFilter, material.Ka.r, material.Ka.g, material.Ka.b);
-    } else {
-        glUniform3f(diffuseTexUniforms.ambientFilter, 1,1,1);
-    }
-
-    if (material.flags & OBJ_MTL_KD) {
-        glUniform3f(diffuseTexUniforms.diffuseFilter, material.Kd.r, material.Kd.g, material.Kd.b);
-    } else {
-        glUniform3f(diffuseTexUniforms.diffuseFilter, 1,1,1);
-    }
+    glUniform3f(diffuseTexUniforms.ambientFilter, material.Ka.r, material.Ka.g, material.Ka.b);
+    glUniform3f(diffuseTexUniforms.diffuseFilter, material.Kd.r, material.Kd.g, material.Kd.b);
 }
 // ------------------ End Shader Uniforms -------------------
 
@@ -233,7 +229,7 @@ GLuint compileShader(const char *vertSrc, const char *fragSrc) {
     return shader;
 }
 
-inline bool all(OBJMaterialFlags flags, OBJMaterialFlags mask) {
+inline bool all(MaterialFlags flags, MaterialFlags mask) {
     return (flags & mask) == mask;
 }
 
@@ -268,7 +264,7 @@ void initShaders() {
     shaders[kDiffuseTex].bindUniforms = diffuseTexBindUniforms;
     checkError();
 
-    bindShader(shaders[kTexCoord]);
+    bindShader(kTexCoord);
 
     for (int c = 0; c < kNumShaders; c++) {
         u32 program = shaders[c].program;
@@ -280,39 +276,36 @@ void initShaders() {
     #undef getUniform
 }
 
-Shader &getShader(int shader) {
-    return shaders[shader];
+bool validTexture(const Mesh &mesh, u32 texName) {
+    return mesh.textures[texName].glHandle != BAD_TEX;
 }
 
-bool validTexture(const OBJMesh &mesh, u32 texName) {
-    return mesh.textures[texName].texName != UNLOADED;
-}
+u16 findShader(const Mesh &mesh, const Material &material) {
+    bool ka = (material.flags & MAT_AMBIENT_TEX) != 0;
+    bool kd = (material.flags & MAT_DIFFUSE_TEX) != 0;
+    bool bump = (material.flags & MAT_NORMAL_TANGENT_TEX) != 0;
 
-Shader &findShader(const OBJMesh &mesh, const OBJMaterial &material) {
-    bool ka = (material.flags & OBJ_MTL_MAP_KA) != 0;
-    bool kd = (material.flags & OBJ_MTL_MAP_KD) != 0;
-    bool bump = (material.flags & OBJ_MTL_MAP_BUMP) != 0;
-
-    if (ka && !validTexture(mesh, material.map_Ka)) return shaders[kNormal];
-    if (kd && !validTexture(mesh, material.map_Kd)) return shaders[kNormal];
-    if (bump && !validTexture(mesh, material.map_bump)) return shaders[kNormal];
+    if (ka && !validTexture(mesh, material.map_Ka)) return kNormal;
+    if (kd && !validTexture(mesh, material.map_Kd)) return kNormal;
+    if (bump && !validTexture(mesh, material.map_bump)) return kNormal;
 
 //    if (ka && kd && bump) return shaders[kBumpTex];
 //    else if (bump) return shaders[kNormal];
 
-    if (ka && kd) return shaders[kDiffuseTex];
+    if (ka && kd) return kDiffuseTex;
 
-    return shaders[kNormal];
+    return kNormal;
 }
 
-void bindShader(const Shader &shader) {
-    if (currentShader == &shader) return;
-    glUseProgram(shader.program);
-    currentShader = &shader;
+void bindShader(u16 handle) {
+    Shader *shader = &shaders[handle];
+    if (currentShader == shader) return;
+    glUseProgram(shader->program);
+    currentShader = shader;
     checkError();
 }
 
-void bindMaterial(const glm::mat4 &mvp, const glm::mat3 &normal, const OBJMesh &mesh, const OBJMaterial &material) {
+void bindMaterial(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
     currentShader->bindUniforms(mvp, normal, mesh, material);
     checkError();
 }

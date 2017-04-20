@@ -7,14 +7,10 @@
 
 #include <glm/glm.hpp>
 #include "gl_includes.h"
-#include "obj.h"
+#include "types.h"
+#include "mesh.h"
 
-struct Shader {
-    GLuint program;
-    void (*bindUniforms)(const glm::mat4 &mvp, const glm::mat3 &normal, const OBJMesh &mesh, const OBJMaterial &material);
-};
-
-enum {
+enum : u16 {
     kTexCoord,
     kNormal,
     kDiffuseTex,
@@ -27,9 +23,8 @@ enum {
 #define VAO_TEX 2
 
 void initShaders();
-Shader &findShader(const OBJMesh &mesh, const OBJMaterial &material);
-Shader &getShader(int shader);
-void bindShader(const Shader &shader);
-void bindMaterial(const glm::mat4 &mvp, const glm::mat3 &normal, const OBJMesh &mesh, const OBJMaterial &material);
+u16 findShader(const Mesh &mesh, const Material &material);
+void bindShader(u16 shader);
+void bindMaterial(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material);
 
 #endif //SPONZA_MATERIAL_H

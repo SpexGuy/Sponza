@@ -23,50 +23,17 @@ mat4 rotation; // identity
 mat4 view;
 mat4 projection;
 
-OBJMesh mesh;
+Mesh mesh;
 
-GLuint meshVao, testVao;
+GLuint testVao;
 
 bool materialPreview = false;
 
 int part = -1;
 int renderMode = 0;
 
-void optimizeMesh() {
-    if (mesh.meshParts.size() == 0)
-        return; // shouldn't happen but JIC
-
-    stable_sort(mesh.meshParts.begin(), mesh.meshParts.end(),
-                [](const OBJMeshPart &a, const OBJMeshPart &b) {
-        return a.materialIndex < b.materialIndex;
-    });
-
-    vector<u32> newIndices(mesh.indices.size());
-    vector<OBJMeshPart> newMeshParts;
-    u32 currentMaterial = mesh.meshParts[0].materialIndex;
-    u32 pos = 0;
-    newMeshParts.push_back(OBJMeshPart {currentMaterial, pos, 0});
-    for (OBJMeshPart &part : mesh.meshParts) {
-        u32 mat = part.materialIndex;
-        if (mat != currentMaterial) {
-            newMeshParts.back().indexSize = pos - newMeshParts.back().indexOffset;
-            currentMaterial = mat;
-            newMeshParts.push_back(OBJMeshPart {currentMaterial, pos, 0});
-        }
-        memcpy(&newIndices[pos], &mesh.indices[part.indexOffset], part.indexSize * sizeof(u32));
-        pos += part.indexSize;
-    }
-    assert(pos == mesh.indices.size());
-    newMeshParts.back().indexSize = pos - newMeshParts.back().indexOffset;
-
-    printf("Mesh optimized; number of parts reduced from %lu to %lu\n", mesh.meshParts.size(), newMeshParts.size());
-
-    mesh.meshParts = std::move(newMeshParts);
-    mesh.indices = std::move(newIndices);
-}
-
-void loadTextures(string dir) {
-    for (OBJTexture &tex : mesh.textures) {
+void loadTextures(const string &dir, OBJMesh &obj) {
+    for (OBJTexture &tex : obj.textures) {
         if (tex.texName == UNLOADED) {
             string file = dir + '/' + tex.name;
             glGenTextures(1, &tex.texName);
@@ -78,51 +45,26 @@ void loadTextures(string dir) {
     }
 }
 
-GLuint createVao() {
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    checkError();
-
-    GLuint verts, indices;
-    glGenBuffers(1, &verts);
-    glGenBuffers(1, &indices);
-    glBindBuffer(GL_ARRAY_BUFFER, verts);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices);
-
-    glEnableVertexAttribArray(VAO_POS);
-    glEnableVertexAttribArray(VAO_NOR);
-    glEnableVertexAttribArray(VAO_TEX);
-    glVertexAttribPointer(VAO_POS, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), 0);
-    glVertexAttribPointer(VAO_NOR, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) sizeof(vec3));
-    glVertexAttribPointer(VAO_TEX, 2, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) (sizeof(vec3) * 2));
-    checkError();
-
-    return vao;
-}
-
 void setup() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 
-    bool success = loadObjFile("assets/sponza", "sponza.obj", mesh);
+    initShaders();
+
+    OBJMesh obj;
+    bool success = loadObjFile("assets/sponza", "sponza.obj", obj);
     if (!success) {
         printf("Failed to load materials.\n");
         exit(2);
     }
-    printf("Loaded %lu materials.\n", mesh.materials.size());
-    printf("Loaded %lu mesh parts.\n", mesh.meshParts.size());
-    printf("Loaded %lu vertices and %lu indices.\n", mesh.verts.size(), mesh.indices.size());
+    printf("Loaded %lu materials.\n", obj.materials.size());
+    printf("Loaded %lu mesh parts.\n", obj.meshParts.size());
+    printf("Loaded %lu vertices and %lu indices.\n", obj.verts.size(), obj.indices.size());
 
-    optimizeMesh();
+    loadTextures("assets/sponza", obj);
 
-    loadTextures("assets/sponza");
-
-    meshVao = createVao();
-    glBufferData(GL_ARRAY_BUFFER, mesh.verts.size() * sizeof(mesh.verts[0]), mesh.verts.data(), GL_STATIC_DRAW);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(mesh.indices[0]), mesh.indices.data(), GL_STATIC_DRAW);
-    checkError();
+    obj2mesh(obj, mesh);
 
     float testVerts[] = {
         0, 0, 0,
@@ -149,8 +91,6 @@ void setup() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(testIndices), testIndices, GL_STATIC_DRAW);
     checkError();
 
-    initShaders();
-
     view = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
     rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
 }
@@ -161,30 +101,29 @@ void draw() {
     mat4 mvp = projection * view * rotation;
     mat3 normal = mat3(view * rotation);
 
-    glBindVertexArray(meshVao);
+    glBindVertexArray(mesh.vao);
     if (part == -1) {
         if (renderMode == 2) {
-            for (int c = 0, n = mesh.meshParts.size(); c < n; c++) {
-                OBJMeshPart &mp = mesh.meshParts[c];
-                OBJMaterial &mat = mesh.materials[mp.materialIndex];
-                Shader &shader = findShader(mesh, mat); // TODO: Cache this
-                bindShader(shader);
+            for (int c = 0, n = mesh.parts.size(); c < n; c++) {
+                MeshPart &mp = mesh.parts[c];
+                Material &mat = mesh.materials[mp.material];
+                bindShader(mp.shader);
                 bindMaterial(mvp, normal, mesh, mat);
-                glDrawElements(GL_TRIANGLES, mp.indexSize, GL_UNSIGNED_INT, (void *)(mp.indexOffset * sizeof(u32)));
+                glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));
             }
         } else {
             // screw mesh parts, just draw everything.
-            bindShader(getShader(renderMode));
+            bindShader(renderMode);
             bindMaterial(mvp, normal, mesh, mesh.materials[0]);
-            glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+            glDrawElements(GL_TRIANGLES, mesh.size, GL_UNSIGNED_INT, 0);
         }
     } else {
-        OBJMeshPart &mp = mesh.meshParts[part];
-        OBJMaterial &mat = mesh.materials[mp.materialIndex];
-        Shader &shader = renderMode == 2 ? findShader(mesh, mat) : getShader(renderMode);
+        MeshPart &mp = mesh.parts[part];
+        Material &mat = mesh.materials[mp.material];
+        u16 shader = renderMode == 2 ? mp.shader : u16(renderMode);
         bindShader(shader);
         bindMaterial(mvp, normal, mesh, mat);
-        glDrawElements(GL_TRIANGLES, mp.indexSize, GL_UNSIGNED_INT, (void *)(mp.indexOffset * sizeof(u32)));
+        glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));
 
         if (materialPreview) {
             glBindVertexArray(testVao);
@@ -216,7 +155,7 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
     } else if (key == GLFW_KEY_S) {
         part++;
-        if (part >= mesh.meshParts.size()) {
+        if (part >= mesh.parts.size()) {
             part = -1;
         }
     } else if (key == GLFW_KEY_M) {
