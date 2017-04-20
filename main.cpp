@@ -25,6 +25,10 @@ mat4 projection;
 
 OBJMesh mesh;
 
+GLuint meshVao, testVao;
+
+bool materialPreview = false;
+
 int part = -1;
 int renderMode = 0;
 
@@ -71,6 +75,29 @@ void loadTextures(string dir) {
     }
 }
 
+GLuint createVao() {
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    checkError();
+
+    GLuint verts, indices;
+    glGenBuffers(1, &verts);
+    glGenBuffers(1, &indices);
+    glBindBuffer(GL_ARRAY_BUFFER, verts);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices);
+
+    glEnableVertexAttribArray(VAO_POS);
+    glEnableVertexAttribArray(VAO_NOR);
+    glEnableVertexAttribArray(VAO_TEX);
+    glVertexAttribPointer(VAO_POS, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), 0);
+    glVertexAttribPointer(VAO_NOR, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) sizeof(vec3));
+    glVertexAttribPointer(VAO_TEX, 2, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) (sizeof(vec3) * 2));
+    checkError();
+
+    return vao;
+}
+
 void setup() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
@@ -89,18 +116,35 @@ void setup() {
 
     loadTextures("assets/sponza");
 
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    checkError();
-
-    GLuint verts, indices;
-    glGenBuffers(1, &verts);
-    glGenBuffers(1, &indices);
-    glBindBuffer(GL_ARRAY_BUFFER, verts);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices);
+    meshVao = createVao();
     glBufferData(GL_ARRAY_BUFFER, mesh.verts.size() * sizeof(mesh.verts[0]), mesh.verts.data(), GL_STATIC_DRAW);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(mesh.indices[0]), mesh.indices.data(), GL_STATIC_DRAW);
+    checkError();
+
+    float testVerts[] = {
+        0, 0, 0,
+        0, 0, 1,
+        1, 0,
+
+       -1, 0, 0,
+        0, 0, 1,
+        0, 0,
+
+       -1,-1, 0,
+        0, 0, 1,
+        0, 1,
+
+        0,-1, 0,
+        0, 0, 1,
+        1, 1,
+    };
+
+    u32 testIndices[] = {0, 1, 2, 2, 3, 0};
+
+    testVao = createVao();
+    glBufferData(GL_ARRAY_BUFFER, sizeof(testVerts), testVerts, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(testIndices), testIndices, GL_STATIC_DRAW);
+    checkError();
 
     initShaders();
 
@@ -114,6 +158,7 @@ void draw() {
     mat4 mvp = projection * view * rotation;
     mat3 normal = mat3(view * rotation);
 
+    glBindVertexArray(meshVao);
     if (part == -1) {
         if (renderMode == 2) {
             for (int c = 0, n = mesh.meshParts.size(); c < n; c++) {
@@ -137,6 +182,14 @@ void draw() {
         bindShader(shader);
         bindMaterial(mvp, normal, mesh, mat);
         glDrawElements(GL_TRIANGLES, mp.indexSize, GL_UNSIGNED_INT, (void *)(mp.indexOffset * sizeof(u32)));
+
+        if (materialPreview) {
+            glBindVertexArray(testVao);
+            mat4 idt4(1);
+            mat3 idt3(1);
+            bindMaterial(idt4, idt3, mesh, mat);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+        }
     }
 }
 
@@ -168,6 +221,8 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         if (renderMode >= 3) {
             renderMode = 0;
         }
+    } else if (key == GLFW_KEY_P) {
+        materialPreview = !materialPreview;
     }
 }
 

@@ -15,9 +15,10 @@ const char *vert = GLSL(
         uniform mat3 normalMat;
         uniform mat4 mvp;
 
-        in vec3 position;
-        in vec3 normal;
-        in vec2 tex;
+        // These constants are duplicated in material.h as VAO_*
+        layout(location=0) in vec3 position;
+        layout(location=1) in vec3 normal;
+        layout(location=2) in vec2 tex;
 
         out vec3 f_normal;
         out vec2 f_tex;
@@ -269,17 +270,12 @@ void initShaders() {
 
     bindShader(shaders[kTexCoord]);
 
-    // All shaders use the same mesh and vao
-    GLuint pos = glGetAttribLocation(shader, "position");
-    GLuint nor = glGetAttribLocation(shader, "normal");
-    GLuint tex = glGetAttribLocation(shader, "tex");
-    glEnableVertexAttribArray(pos);
-    glEnableVertexAttribArray(nor);
-    glEnableVertexAttribArray(tex);
-    glVertexAttribPointer(pos, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), 0);
-    glVertexAttribPointer(nor, 3, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) sizeof(vec3));
-    glVertexAttribPointer(tex, 2, GL_FLOAT, GL_FALSE, sizeof(OBJVertex), (void *) (sizeof(vec3) * 2));
-    checkError();
+    for (int c = 0; c < kNumShaders; c++) {
+        u32 program = shaders[c].program;
+        assert(glGetAttribLocation(program, "position") == VAO_POS);
+        assert(glGetAttribLocation(program, "normal") == VAO_NOR);
+        assert(glGetAttribLocation(program, "tex") == VAO_TEX);
+    }
 
     #undef getUniform
 }
