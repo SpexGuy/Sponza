@@ -244,6 +244,7 @@ bool loadObjFile(const string &cwd, const string &filename, OBJMesh &mesh) {
                 // Process texture coordinate
                 f32 s, t;
                 lineStream >> s >> t;
+                t = 1 - t; // t is flipped in OBJ
                 texCoords.push_back(vec2(s, t));
             } else if (token == "vn") {
                 f32 x, y, z;
