@@ -21,7 +21,16 @@ int loadTexture(GLuint texname, const char *filename, int format = STBI_default)
 GLFWwindow *window;
 
 OrbitNoGimbleCamera orbitCam;
-Camera *cam = &orbitCam;
+FlyAroundCamera flyCam;
+
+Camera *cameras[] = {
+    &flyCam,
+    &orbitCam
+};
+int currentCamera = 0;
+const int nCameras = sizeof(cameras) / sizeof(cameras[0]);
+
+bool cursorCaught;
 
 mat4 projection;
 
@@ -51,6 +60,9 @@ void setup() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    cursorCaught = true;
 
     initShaders();
 
@@ -95,11 +107,13 @@ void setup() {
 
     orbitCam.m_offset = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
     orbitCam.m_rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
+    flyCam.m_position = vec3(0, 200, 0);
 }
 
 void draw(s32 dt) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    Camera *cam = cameras[currentCamera];
     cam->update(dt);
     mat4 mvp = projection * cam->m_view;
     mat3 normal = mat3(cam->m_view);
@@ -143,7 +157,7 @@ static void glfw_resize_callback(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
     if (height != 0) {
         float aspect = float(width) / height;
-        projection = perspective(31.f, aspect, 1000.f, 10000.f);
+        projection = perspective(31.f, aspect, 10.f, 10000.f);
     }
 }
 
@@ -152,11 +166,11 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
 
     if (key == GLFW_KEY_ESCAPE) {
         glfwSetWindowShouldClose(window, true);
-    } else if (key == GLFW_KEY_W) {
+    } else if (key == GLFW_KEY_R) {
         static bool wireframe = false;
         wireframe = !wireframe;
         glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-    } else if (key == GLFW_KEY_S) {
+    } else if (key == GLFW_KEY_F) {
         part++;
         if (part >= mesh.parts.size()) {
             part = -1;
@@ -168,18 +182,28 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         }
     } else if (key == GLFW_KEY_P) {
         materialPreview = !materialPreview;
+    } else if (key == GLFW_KEY_C) {
+        currentCamera++;
+        if (currentCamera >= nCameras) {
+            currentCamera = 0;
+        }
     }
 }
 
 vec2 lastMouse = vec2(-1,-1);
 
 static void glfw_click_callback(GLFWwindow *window, int button, int action, int mods) {
-    double x, y;
-    glfwGetCursorPos(window, &x, &y);
+//    double x, y;
+//    glfwGetCursorPos(window, &x, &y);
 
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if (action == GLFW_PRESS) lastMouse = vec2(x, y);
-        else if (action == GLFW_RELEASE) lastMouse = vec2(-1, -1);
+    if (action != GLFW_PRESS) return;
+
+    if (cursorCaught) {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        cursorCaught = false;
+    } else {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        cursorCaught = true;
     }
 }
 
@@ -193,7 +217,9 @@ static void glfw_mouse_callback(GLFWwindow *window, double xPos, double yPos) {
     vec2 delta = current - lastMouse;
     if (delta == vec2(0,0)) return;
 
-    cam->mouseMoved(delta);
+    if (cursorCaught) {
+        cameras[currentCamera]->mouseMoved(delta);
+    }
 
     lastMouse = current;
 }
