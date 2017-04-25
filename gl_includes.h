@@ -36,4 +36,6 @@ static bool _check_gl_error(const char *file, int line) {
     return hasError;
 }
 
+extern GLFWwindow *window;
+
 #endif //GLERROR_H

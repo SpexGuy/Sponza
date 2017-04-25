@@ -11,6 +11,7 @@
 #include "Perf.h"
 #include "obj.h"
 #include "material.h"
+#include "camera.h"
 
 using namespace std;
 using namespace glm;
@@ -19,8 +20,9 @@ int loadTexture(GLuint texname, const char *filename, int format = STBI_default)
 
 GLFWwindow *window;
 
-mat4 rotation; // identity
-mat4 view;
+OrbitNoGimbleCamera orbitCam;
+Camera *cam = &orbitCam;
+
 mat4 projection;
 
 Mesh mesh;
@@ -91,15 +93,16 @@ void setup() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(testIndices), testIndices, GL_STATIC_DRAW);
     checkError();
 
-    view = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
-    rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
+    orbitCam.m_offset = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
+    orbitCam.m_rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
 }
 
-void draw() {
+void draw(s32 dt) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    mat4 mvp = projection * view * rotation;
-    mat3 normal = mat3(view * rotation);
+    cam->update(dt);
+    mat4 mvp = projection * cam->m_view;
+    mat3 normal = mat3(cam->m_view);
 
     glBindVertexArray(mesh.vao);
     if (part == -1) {
@@ -181,27 +184,23 @@ static void glfw_click_callback(GLFWwindow *window, int button, int action, int 
 }
 
 static void glfw_mouse_callback(GLFWwindow *window, double xPos, double yPos) {
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) return;
     if (lastMouse == vec2(-1,-1)) {
         lastMouse = vec2(xPos, yPos);
         return; // can't update this frame, no previous data.
-    } else {
-        vec2 current = vec2(xPos, yPos);
-        vec2 delta = current - lastMouse;
-        if (delta == vec2(0,0)) return;
-
-        vec3 rotationVector = vec3(delta.y, delta.x, 0);
-        float angle = length(delta);
-        rotation = rotate(angle, rotationVector) * rotation;
-
-        lastMouse = current;
     }
+
+    vec2 current = vec2(xPos, yPos);
+    vec2 delta = current - lastMouse;
+    if (delta == vec2(0,0)) return;
+
+    cam->mouseMoved(delta);
+
+    lastMouse = current;
 }
 
 void glfw_error_callback(int error, const char* description) {
     cerr << "GLFW Error: " << description << " (error " << error << ")" << endl;
 }
-
 
 /**
  * Loads a texture from the filesystem into OpenGL. Returns the number of channels loaded, or 0 on failure.
@@ -306,6 +305,7 @@ int main() {
     markPerformanceFrame();
     printPerformanceData();
     double lastPerfPrintTime = glfwGetTime();
+    clock_t lastTime = clock() * 1000 / CLOCKS_PER_SEC;
     while (!glfwWindowShouldClose(window)) {
 
         {
@@ -315,7 +315,10 @@ int main() {
         }
         {
             Perf stat("Draw");
-            draw();
+            clock_t now = clock() * 1000 / CLOCKS_PER_SEC;
+            s32 dt = s32(now - lastTime);
+            draw(dt);
+            lastTime = now;
             checkError();
         }
         {
