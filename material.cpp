@@ -11,7 +11,7 @@ using namespace glm;
 
 struct Shader {
     GLuint program;
-    void (*bindUniforms)(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material);
+    void (*bindUniforms)(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material);
 };
 
 
@@ -19,6 +19,7 @@ struct Shader {
 
 const char *vert = GLSL(
         uniform mat3 normalMat;
+        uniform mat4 mv;
         uniform mat4 mvp;
 
         // These constants are duplicated in material.h as VAO_*
@@ -26,11 +27,13 @@ const char *vert = GLSL(
         layout(location=1) in vec3 normal;
         layout(location=2) in vec2 tex;
 
+        out vec3 f_position;
         out vec3 f_normal;
         out vec2 f_tex;
 
         void main() {
             gl_Position = mvp * vec4(position, 1.0);
+            f_position = (mv * vec4(position, 1.0)).xyz;
             f_normal = normalMat * normal;
             f_tex = tex;
         }
@@ -44,6 +47,7 @@ const char *diffuseTexFrag = GLSL(
         uniform sampler2D diffuseTex;
         uniform vec3 diffuseFilter;
 
+        in vec3 f_position;
         in vec3 f_normal;
         in vec2 f_tex;
 
@@ -52,9 +56,109 @@ const char *diffuseTexFrag = GLSL(
         void main() {
             vec3 ambientColor = texture(ambientTex, f_tex).rgb;
             vec3 diffuseColor = texture(diffuseTex, f_tex).rgb;
-            float kDiffuse = max(0, dot(lightDir, normalize(f_normal)));
+            vec3 normal = normalize(f_normal);
+            float kDiffuse = max(0, dot(lightDir, normal));
             vec3 color = ambientColor * ambientFilter +
                          diffuseColor * diffuseFilter * kDiffuse;
+            fragColor = vec4(color, 1);
+        }
+);
+
+const char *diffuseAlphaTexFrag = GLSL(
+        const vec3 lightDir = normalize(vec3(1,1,1));
+
+        uniform sampler2D ambientTex;
+        uniform vec3 ambientFilter;
+        uniform sampler2D diffuseTex;
+        uniform vec3 diffuseFilter;
+        uniform sampler2D alphaTex;
+
+        in vec3 f_position;
+        in vec3 f_normal;
+        in vec2 f_tex;
+
+        out vec4 fragColor;
+
+        void main() {
+            float alpha = texture(alphaTex, f_tex).r;
+            if (alpha < 0.5) discard;
+
+            vec3 ambientColor = texture(ambientTex, f_tex).rgb;
+            vec3 diffuseColor = texture(diffuseTex, f_tex).rgb;
+            vec3 normal = normalize(f_normal);
+            float kDiffuse = max(0, dot(lightDir, normal));
+            vec3 color = ambientColor * ambientFilter +
+                         diffuseColor * diffuseFilter * kDiffuse;
+            fragColor = vec4(color, 1);
+        }
+);
+
+const char *specularTexFrag = GLSL(
+        const vec3 lightDir = normalize(vec3(1,1,1));
+
+        uniform sampler2D ambientTex;
+        uniform vec3 ambientFilter;
+        uniform sampler2D diffuseTex;
+        uniform vec3 diffuseFilter;
+        uniform sampler2D specularTex;
+        uniform float shininess;
+
+        in vec3 f_position;
+        in vec3 f_normal;
+        in vec2 f_tex;
+
+        out vec4 fragColor;
+
+        void main() {
+            vec3 ambientColor = texture(ambientTex, f_tex).rgb;
+            vec3 diffuseColor = texture(diffuseTex, f_tex).rgb;
+            vec3 specularColor = texture(specularTex, f_tex).rgb;
+            vec3 normal = normalize(f_normal);
+            vec3 viewDir = normalize(-f_position);
+            float kDiffuse = max(0, dot(lightDir, normal));
+            vec3 halfway = normalize(lightDir + viewDir);
+            float specAngle = max(0, dot(halfway, normal));
+            float kSpecular = pow(specAngle, shininess);
+            vec3 color = ambientColor * ambientFilter +
+                         diffuseColor * diffuseFilter * kDiffuse +
+                         specularColor * kSpecular;
+            fragColor = vec4(color, 1);
+        }
+);
+
+const char *specularAlphaTexFrag = GLSL(
+        const vec3 lightDir = normalize(vec3(1,1,1));
+
+        uniform sampler2D ambientTex;
+        uniform vec3 ambientFilter;
+        uniform sampler2D diffuseTex;
+        uniform vec3 diffuseFilter;
+        uniform sampler2D specularTex;
+        uniform float shininess;
+        uniform sampler2D alphaTex;
+
+        in vec3 f_position;
+        in vec3 f_normal;
+        in vec2 f_tex;
+
+        out vec4 fragColor;
+
+        void main() {
+            float alpha = texture(alphaTex, f_tex).r;
+            if (alpha < 0.5) discard;
+
+            vec3 ambientColor = texture(ambientTex, f_tex).rgb;
+            vec3 diffuseColor = texture(diffuseTex, f_tex).rgb;
+            vec3 specularColor = texture(specularTex, f_tex).rgb;
+            vec3 normal = normalize(f_normal);
+            vec3 viewDir = normalize(-f_position);
+            float kDiffuse = max(0, dot(lightDir, normal));
+            vec3 halfway = normalize(lightDir + viewDir);
+            float specAngle = max(0, dot(halfway, normal));
+            float kSpecular = pow(specAngle, shininess);
+            vec3 color = ambientColor * ambientFilter +
+                         diffuseColor * diffuseFilter * kDiffuse +
+                         specularColor * kSpecular;
             fragColor = vec4(color, 1);
         }
 );
@@ -63,6 +167,7 @@ const char *texCoordFrag = GLSL(
         const float ambient = 0.2;
         const vec3 lightDir = normalize(vec3(1,1,1));
 
+        in vec3 f_position;
         in vec3 f_normal;
         in vec2 f_tex;
 
@@ -83,6 +188,7 @@ const char *normalFrag = GLSL(
         const float ambient = 0.2;
         const vec3 lightDir = normalize(vec3(1,1,1));
 
+        in vec3 f_position;
         in vec3 f_normal;
         in vec2 f_tex;
 
@@ -118,46 +224,125 @@ const Shader *currentShader = nullptr;
 struct {
     GLuint normalMat;
     GLuint mvp;
+    GLuint mv;
 } texCoordUniforms;
 
 struct {
     GLuint normalMat;
     GLuint mvp;
+    GLuint mv;
     GLuint ambientTex;
     GLuint ambientFilter;
     GLuint diffuseTex;
     GLuint diffuseFilter;
 } diffuseTexUniforms;
 
+struct {
+    GLuint normalMat;
+    GLuint mvp;
+    GLuint mv;
+    GLuint ambientTex;
+    GLuint ambientFilter;
+    GLuint diffuseTex;
+    GLuint diffuseFilter;
+    GLuint alphaTex;
+} diffuseAlphaTexUniforms;
+
+struct {
+    GLuint normalMat;
+    GLuint mvp;
+    GLuint mv;
+    GLuint ambientTex;
+    GLuint ambientFilter;
+    GLuint diffuseTex;
+    GLuint diffuseFilter;
+    GLuint specularTex;
+    GLuint shininess;
+} specularTexUniforms;
+
+struct {
+    GLuint normalMat;
+    GLuint mvp;
+    GLuint mv;
+    GLuint ambientTex;
+    GLuint ambientFilter;
+    GLuint diffuseTex;
+    GLuint diffuseFilter;
+    GLuint specularTex;
+    GLuint shininess;
+    GLuint alphaTex;
+} specularAlphaTexUniforms;
+
 
 template<typename U>
-inline void bindUniformsBase(const U &uniforms, const glm::mat4 &mvp, const glm::mat3 &normal) {
+inline void bindUniformsBase(const U &uniforms, const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal) {
     glUniformMatrix4fv(uniforms.mvp, 1, GL_FALSE, &mvp[0][0]);
+    glUniformMatrix4fv(uniforms.mv, 1, GL_FALSE, &mv[0][0]);
     glUniformMatrix3fv(uniforms.normalMat, 1, GL_FALSE, &normal[0][0]);
 }
 
-void texCoordBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
-    bindUniformsBase(texCoordUniforms, mvp, normal);
-}
-
-void diffuseTexBindUniforms(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
-    bindUniformsBase(diffuseTexUniforms, mvp, normal);
-
+template<typename U>
+inline void bindUniformsDiffuse(const U &uniforms, const Mesh &mesh, const Material &material) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Ka].glHandle);
-    glUniform1i(diffuseTexUniforms.ambientTex, 0);
+    glUniform1i(uniforms.ambientTex, 0);
 
     if (material.map_Ka == material.map_Kd) {
-        glUniform1i(diffuseTexUniforms.diffuseTex, 0);
+        glUniform1i(uniforms.diffuseTex, 0);
     } else {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Kd].glHandle);
-        glUniform1i(diffuseTexUniforms.diffuseTex, 1);
+        glUniform1i(uniforms.diffuseTex, 1);
     }
 
-    glUniform3f(diffuseTexUniforms.ambientFilter, material.Ka.r, material.Ka.g, material.Ka.b);
-    glUniform3f(diffuseTexUniforms.diffuseFilter, material.Kd.r, material.Kd.g, material.Kd.b);
+    glUniform3f(uniforms.ambientFilter, material.Ka.r, material.Ka.g, material.Ka.b);
+    glUniform3f(uniforms.diffuseFilter, material.Kd.r, material.Kd.g, material.Kd.b);
 }
+
+template<typename U>
+inline void bindUniformsSpecular(const U &uniforms, const Mesh &mesh, const Material &material) {
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_Ks].glHandle);
+    glUniform1i(uniforms.specularTex, 2);
+
+    glUniform1f(uniforms.shininess, material.Ns);
+}
+
+template<typename U>
+inline void bindUniformsAlpha(const U &uniforms, const Mesh &mesh, const Material &material) {
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, mesh.textures[material.map_d].glHandle);
+    glUniform1i(uniforms.alphaTex, 3);
+}
+
+void texCoordBindUniforms(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
+    bindUniformsBase(texCoordUniforms, mvp, mv, normal);
+}
+
+void diffuseTexBindUniforms(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
+    bindUniformsBase(diffuseTexUniforms, mvp, mv, normal);
+    bindUniformsDiffuse(diffuseTexUniforms, mesh, material);
+}
+
+void specularTexBindUniforms(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
+    bindUniformsBase(specularTexUniforms, mvp, mv, normal);
+    bindUniformsDiffuse(specularTexUniforms, mesh, material);
+    bindUniformsSpecular(specularTexUniforms, mesh, material);
+}
+
+void diffuseAlphaTexBindUniforms(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
+    bindUniformsBase(diffuseAlphaTexUniforms, mvp, mv, normal);
+    bindUniformsDiffuse(diffuseAlphaTexUniforms, mesh, material);
+    bindUniformsAlpha(diffuseAlphaTexUniforms, mesh, material);
+}
+
+void specularAlphaTexBindUniforms(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
+    bindUniformsBase(specularAlphaTexUniforms, mvp, mv, normal);
+    bindUniformsDiffuse(specularAlphaTexUniforms, mesh, material);
+    bindUniformsSpecular(specularAlphaTexUniforms, mesh, material);
+    bindUniformsAlpha(specularAlphaTexUniforms, mesh, material);
+}
+
 // ------------------ End Shader Uniforms -------------------
 
 
@@ -242,6 +427,7 @@ void initShaders() {
         do { storage.field = glGetUniformLocation(shader, #field); } while (0)
 
     GLuint shader = compileShader(vert, texCoordFrag);
+    getUniform(texCoordUniforms, mv);
     getUniform(texCoordUniforms, mvp);
     getUniform(texCoordUniforms, normalMat);
     shaders[kTexCoord].program = shader;
@@ -254,6 +440,7 @@ void initShaders() {
     shaders[kNormal].bindUniforms = texCoordBindUniforms;
 
     shader = compileShader(vert, diffuseTexFrag);
+    getUniform(diffuseTexUniforms, mv);
     getUniform(diffuseTexUniforms, mvp);
     getUniform(diffuseTexUniforms, normalMat);
     getUniform(diffuseTexUniforms, ambientTex);
@@ -262,6 +449,48 @@ void initShaders() {
     getUniform(diffuseTexUniforms, diffuseFilter);
     shaders[kDiffuseTex].program = shader;
     shaders[kDiffuseTex].bindUniforms = diffuseTexBindUniforms;
+    checkError();
+
+    shader = compileShader(vert, specularTexFrag);
+    getUniform(specularTexUniforms, mv);
+    getUniform(specularTexUniforms, mvp);
+    getUniform(specularTexUniforms, normalMat);
+    getUniform(specularTexUniforms, ambientTex);
+    getUniform(specularTexUniforms, ambientFilter);
+    getUniform(specularTexUniforms, diffuseTex);
+    getUniform(specularTexUniforms, diffuseFilter);
+    getUniform(specularTexUniforms, specularTex);
+    getUniform(specularTexUniforms, shininess);
+    shaders[kSpecularTex].program = shader;
+    shaders[kSpecularTex].bindUniforms = specularTexBindUniforms;
+    checkError();
+
+    shader = compileShader(vert, diffuseAlphaTexFrag);
+    getUniform(diffuseAlphaTexUniforms, mv);
+    getUniform(diffuseAlphaTexUniforms, mvp);
+    getUniform(diffuseAlphaTexUniforms, normalMat);
+    getUniform(diffuseAlphaTexUniforms, ambientTex);
+    getUniform(diffuseAlphaTexUniforms, ambientFilter);
+    getUniform(diffuseAlphaTexUniforms, diffuseTex);
+    getUniform(diffuseAlphaTexUniforms, diffuseFilter);
+    getUniform(diffuseAlphaTexUniforms, alphaTex);
+    shaders[kDiffuseAlphaTex].program = shader;
+    shaders[kDiffuseAlphaTex].bindUniforms = diffuseAlphaTexBindUniforms;
+    checkError();
+
+    shader = compileShader(vert, specularAlphaTexFrag);
+    getUniform(specularAlphaTexUniforms, mv);
+    getUniform(specularAlphaTexUniforms, mvp);
+    getUniform(specularAlphaTexUniforms, normalMat);
+    getUniform(specularAlphaTexUniforms, ambientTex);
+    getUniform(specularAlphaTexUniforms, ambientFilter);
+    getUniform(specularAlphaTexUniforms, diffuseTex);
+    getUniform(specularAlphaTexUniforms, diffuseFilter);
+    getUniform(specularAlphaTexUniforms, specularTex);
+    getUniform(specularAlphaTexUniforms, shininess);
+    getUniform(specularAlphaTexUniforms, alphaTex);
+    shaders[kSpecularAlphaTex].program = shader;
+    shaders[kSpecularAlphaTex].bindUniforms = specularAlphaTexBindUniforms;
     checkError();
 
     bindShader(kTexCoord);
@@ -283,14 +512,20 @@ bool validTexture(const Mesh &mesh, u32 texName) {
 u16 findShader(const Mesh &mesh, const Material &material) {
     bool ka = (material.flags & MAT_AMBIENT_TEX) != 0;
     bool kd = (material.flags & MAT_DIFFUSE_TEX) != 0;
-    bool bump = (material.flags & MAT_NORMAL_TANGENT_TEX) != 0;
+    bool ks = (material.flags & MAT_SPECULAR_TEX) != 0;
+    bool d  = (material.flags & MAT_TRANSPARENCY_TEX) != 0;
 
     if (ka && !validTexture(mesh, material.map_Ka)) return kNormal;
     if (kd && !validTexture(mesh, material.map_Kd)) return kNormal;
-    if (bump && !validTexture(mesh, material.map_bump)) return kNormal;
+    if (ks && !validTexture(mesh, material.map_Ks)) return kNormal;
+    if (d && !validTexture(mesh, material.map_d)) return kNormal;
 
-//    if (ka && kd && bump) return shaders[kBumpTex];
-//    else if (bump) return shaders[kNormal];
+    if (ka && kd && ks && d) return kSpecularAlphaTex;
+    else if (ka && kd && d) return kDiffuseAlphaTex;
+    else if (d) return kNormal; // error
+
+    if (ka && kd && ks) return kSpecularTex;
+    else if (ks) return kNormal; // error
 
     if (ka && kd) return kDiffuseTex;
 
@@ -305,7 +540,7 @@ void bindShader(u16 handle) {
     checkError();
 }
 
-void bindMaterial(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
-    currentShader->bindUniforms(mvp, normal, mesh, material);
+void bindMaterial(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material) {
+    currentShader->bindUniforms(mvp, mv, normal, mesh, material);
     checkError();
 }

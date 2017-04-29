@@ -14,6 +14,9 @@ enum : u16 {
     kTexCoord,
     kNormal,
     kDiffuseTex,
+    kSpecularTex,
+    kDiffuseAlphaTex,
+    kSpecularAlphaTex,
 
     kNumShaders
 };
@@ -25,6 +28,6 @@ enum : u16 {
 void initShaders();
 u16 findShader(const Mesh &mesh, const Material &material);
 void bindShader(u16 shader);
-void bindMaterial(const glm::mat4 &mvp, const glm::mat3 &normal, const Mesh &mesh, const Material &material);
+void bindMaterial(const glm::mat4 &mvp, const glm::mat4 &mv, const glm::mat3 &normal, const Mesh &mesh, const Material &material);
 
 #endif //SPONZA_MATERIAL_H

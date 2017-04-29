@@ -83,8 +83,8 @@ void obj2mesh_material(const OBJMaterial &obj, Material &mat) {
     prop(OBJ_MTL_TF, Tf, vec3(1), 0);
     prop(OBJ_MTL_KA, Ka, vec3(1), 0);
     prop(OBJ_MTL_KD, Kd, vec3(1), 0);
-    prop(OBJ_MTL_KS, Ks, vec3(1), 0);
-    prop(OBJ_MTL_KE, Ke, vec3(1), 0);
+    prop(OBJ_MTL_KS, Ks, vec3(0), 0);
+    prop(OBJ_MTL_KE, Ke, vec3(0), 0);
 
     prop(OBJ_MTL_MAP_KA, map_Ka, TEX_UNLOADED, MAT_AMBIENT_TEX);
     prop(OBJ_MTL_MAP_KD, map_Kd, TEX_UNLOADED, MAT_DIFFUSE_TEX);

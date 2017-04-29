@@ -115,8 +115,9 @@ void draw(s32 dt) {
 
     Camera *cam = cameras[currentCamera];
     cam->update(dt);
-    mat4 mvp = projection * cam->m_view;
-    mat3 normal = mat3(cam->m_view);
+    mat4 &mv = cam->m_view;
+    mat4 mvp = projection * mv;
+    mat3 normal = mat3(mv);
 
     glBindVertexArray(mesh.vao);
     if (part == -1) {
@@ -125,13 +126,13 @@ void draw(s32 dt) {
                 MeshPart &mp = mesh.parts[c];
                 Material &mat = mesh.materials[mp.material];
                 bindShader(mp.shader);
-                bindMaterial(mvp, normal, mesh, mat);
+                bindMaterial(mvp, mv, normal, mesh, mat);
                 glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));
             }
         } else {
             // screw mesh parts, just draw everything.
             bindShader(renderMode);
-            bindMaterial(mvp, normal, mesh, mesh.materials[0]);
+            bindMaterial(mvp, mv, normal, mesh, mesh.materials[0]);
             glDrawElements(GL_TRIANGLES, mesh.size, GL_UNSIGNED_INT, 0);
         }
     } else {
@@ -139,14 +140,14 @@ void draw(s32 dt) {
         Material &mat = mesh.materials[mp.material];
         u16 shader = renderMode == 2 ? mp.shader : u16(renderMode);
         bindShader(shader);
-        bindMaterial(mvp, normal, mesh, mat);
+        bindMaterial(mvp, mv, normal, mesh, mat);
         glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));
 
         if (materialPreview) {
             glBindVertexArray(testVao);
             mat4 idt4(1);
             mat3 idt3(1);
-            bindMaterial(idt4, idt3, mesh, mat);
+            bindMaterial(idt4, idt4, idt3, mesh, mat);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
         }
     }

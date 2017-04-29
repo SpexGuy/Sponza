@@ -49,10 +49,10 @@ void FlyAroundCamera::update(s32 dt) {
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
         movement.x -= 1;
     }
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         movement.y += 1;
     }
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         movement.y -= 1;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
