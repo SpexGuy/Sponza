@@ -107,7 +107,9 @@ void setup() {
 
     orbitCam.m_offset = lookAt(vec3(0, 0, 7000), vec3(0), vec3(0, 1, 0));
     orbitCam.m_rotation = lookAt(vec3(0), vec3(-1), vec3(0, 1, 0));
-    flyCam.m_position = vec3(0, 200, 0);
+    orbitCam.m_dirty = true;
+    orbitCam.update(0); // setup orbitCam.m_pos for lighting
+    flyCam.m_pos = vec3(0, 200, 0);
 }
 
 void draw(s32 dt) {
@@ -115,9 +117,10 @@ void draw(s32 dt) {
 
     Camera *cam = cameras[currentCamera];
     cam->update(dt);
-    mat4 &mv = cam->m_view;
+    mat4 mv = cam->m_view;
     mat4 mvp = projection * mv;
-    mat3 normal = mat3(mv);
+    vec3 camPos = cam->m_pos;
+    vec3 lightPos = orbitCam.m_pos;
 
     glBindVertexArray(mesh.vao);
     if (part == -1) {
@@ -126,13 +129,13 @@ void draw(s32 dt) {
                 MeshPart &mp = mesh.parts[c];
                 Material &mat = mesh.materials[mp.material];
                 bindShader(mp.shader);
-                bindMaterial(mvp, mv, normal, mesh, mat);
+                bindMaterial(mvp, camPos, lightPos, mesh, mat);
                 glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));
             }
         } else {
             // screw mesh parts, just draw everything.
             bindShader(renderMode);
-            bindMaterial(mvp, mv, normal, mesh, mesh.materials[0]);
+            bindMaterial(mvp, camPos, lightPos, mesh, mesh.materials[0]);
             glDrawElements(GL_TRIANGLES, mesh.size, GL_UNSIGNED_INT, 0);
         }
     } else {
@@ -140,14 +143,13 @@ void draw(s32 dt) {
         Material &mat = mesh.materials[mp.material];
         u16 shader = renderMode == 2 ? mp.shader : u16(renderMode);
         bindShader(shader);
-        bindMaterial(mvp, mv, normal, mesh, mat);
+        bindMaterial(mvp, camPos, lightPos, mesh, mat);
         glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));
 
         if (materialPreview) {
             glBindVertexArray(testVao);
             mat4 idt4(1);
-            mat3 idt3(1);
-            bindMaterial(idt4, idt4, idt3, mesh, mat);
+            bindMaterial(idt4, vec3(0,0,1), lightPos, mesh, mat);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
         }
     }

@@ -13,10 +13,15 @@ void OrbitNoGimbleCamera::mouseMoved(glm::vec2 delta) {
     vec3 rotationVector = vec3(delta.y, delta.x, 0);
     float angle = length(delta);
     m_rotation = rotate(angle, rotationVector) * m_rotation;
+    m_dirty = true;
 }
 
 void OrbitNoGimbleCamera::update(s32 dt) {
-    m_view = m_offset * m_rotation;
+    if (m_dirty) {
+        m_view = m_offset * m_rotation;
+        m_pos = vec3(inverse(m_view)[3]); // the easy way
+        m_dirty = false;
+    }
 }
 
 
@@ -67,8 +72,8 @@ void FlyAroundCamera::update(s32 dt) {
         vec3 velocity = movement.x * straight +
                         movement.y * vec3(0,1,0) +
                         movement.z * right;
-        m_position += velocity * speed * f32(dt);
+        m_pos += velocity * speed * f32(dt);
     }
 
-    m_view = lookAt(m_position, m_position + forward, vec3(0,1,0));
+    m_view = lookAt(m_pos, m_pos + forward, vec3(0,1,0));
 }
