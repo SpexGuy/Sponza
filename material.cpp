@@ -24,16 +24,22 @@ const char *vert = GLSL(
         layout(location=0) in vec3 position;
         layout(location=1) in vec3 normal;
         layout(location=2) in vec2 tex;
+        layout(location=3) in vec3 tangent;
+        layout(location=4) in vec3 bitangent;
 
         out vec3 f_position;
         out vec3 f_normal;
         out vec2 f_tex;
+        out vec3 f_tangent;
+        out vec3 f_bitangent;
 
         void main() {
             gl_Position = mvp * vec4(position, 1.0);
             f_position = position;
             f_normal = normal;
             f_tex = tex;
+            f_tangent = tangent;
+            f_bitangent = bitangent;
         }
 );
 
@@ -198,6 +204,52 @@ const char *normalFrag = GLSL(
         void main() {
             // lighting is not realistic. Meant just to distinguish the faces.
             vec3 normal = normalize(f_normal);
+            vec3 color = abs(normal);
+            vec3 lightDir = normalize(lightPos - f_position);
+            float light = dot(normal, lightDir) / 2 + 0.5;
+            light = light + ambient * (1 - light);
+            fragColor = vec4(light * color, 1);
+        }
+);
+
+const char *tangentFrag = GLSL(
+        const float ambient = 0.2;
+        uniform vec3 lightPos;
+
+        in vec3 f_position;
+        in vec3 f_normal;
+        in vec2 f_tex;
+        in vec3 f_tangent;
+        in vec3 f_bitangent;
+
+        out vec4 fragColor;
+
+        void main() {
+            // lighting is not realistic. Meant just to distinguish the faces.
+            vec3 normal = normalize(f_tangent);
+            vec3 color = abs(normal);
+            vec3 lightDir = normalize(lightPos - f_position);
+            float light = dot(normal, lightDir) / 2 + 0.5;
+            light = light + ambient * (1 - light);
+            fragColor = vec4(light * color, 1);
+        }
+);
+
+const char *bitangentFrag = GLSL(
+        const float ambient = 0.2;
+        uniform vec3 lightPos;
+
+        in vec3 f_position;
+        in vec3 f_normal;
+        in vec2 f_tex;
+        in vec3 f_tangent;
+        in vec3 f_bitangent;
+
+        out vec4 fragColor;
+
+        void main() {
+            // lighting is not realistic. Meant just to distinguish the faces.
+            vec3 normal = normalize(f_bitangent);
             vec3 color = abs(normal);
             vec3 lightDir = normalize(lightPos - f_position);
             float light = dot(normal, lightDir) / 2 + 0.5;
@@ -436,6 +488,14 @@ void initShaders() {
     shader = compileShader(vert, normalFrag);
     shaders[kNormal].program = shader;
     shaders[kNormal].bindUniforms = texCoordBindUniforms;
+
+    shader = compileShader(vert, tangentFrag);
+    shaders[kTangent].program = shader;
+    shaders[kTangent].bindUniforms = texCoordBindUniforms;
+
+    shader = compileShader(vert, bitangentFrag);
+    shaders[kBitangent].program = shader;
+    shaders[kBitangent].bindUniforms = texCoordBindUniforms;
 
     shader = compileShader(vert, diffuseTexFrag);
     getUniform(diffuseTexUniforms, mvp);

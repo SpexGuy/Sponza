@@ -13,6 +13,8 @@
 enum : u16 {
     kTexCoord,
     kNormal,
+    kTangent,
+    kBitangent,
     kDiffuseTex,
     kSpecularTex,
     kDiffuseAlphaTex,
@@ -24,6 +26,8 @@ enum : u16 {
 #define VAO_POS 0
 #define VAO_NOR 1
 #define VAO_TEX 2
+#define VAO_TAN 3
+#define VAO_BTN 4
 
 void initShaders();
 u16 findShader(const Mesh &mesh, const Material &material);

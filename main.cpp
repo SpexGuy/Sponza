@@ -59,7 +59,7 @@ void loadTextures(const string &dir, OBJMesh &obj) {
 void setup() {
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     cursorCaught = true;
@@ -81,20 +81,28 @@ void setup() {
     obj2mesh(obj, mesh);
 
     float testVerts[] = {
-        0, 0, 0,
-        0, 0, 1,
-        1, 0,
+        0, 0, 0,    // position
+        0, 0, 1,    // normal
+        1, 0, 0,    // tangent
+        0, 1, 0,    // bitangent
+        1, 0,       // tex
 
        -1, 0, 0,
         0, 0, 1,
+        1, 0, 0,
+        0, 1, 0,
         0, 0,
 
        -1,-1, 0,
         0, 0, 1,
+        1, 0, 0,
+        0, 1, 0,
         0, 1,
 
         0,-1, 0,
         0, 0, 1,
+        1, 0, 0,
+        0, 1, 0,
         1, 1,
     };
 
@@ -124,7 +132,7 @@ void draw(s32 dt) {
 
     glBindVertexArray(mesh.vao);
     if (part == -1) {
-        if (renderMode == 2) {
+        if (renderMode == kDiffuseTex) {
             for (int c = 0, n = mesh.parts.size(); c < n; c++) {
                 MeshPart &mp = mesh.parts[c];
                 Material &mat = mesh.materials[mp.material];
@@ -180,7 +188,7 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         }
     } else if (key == GLFW_KEY_M) {
         renderMode++;
-        if (renderMode >= 3) {
+        if (renderMode >= kDiffuseTex) {
             renderMode = 0;
         }
     } else if (key == GLFW_KEY_P) {

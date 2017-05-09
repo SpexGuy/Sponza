@@ -19,7 +19,7 @@ struct Camera {
 struct OrbitNoGimbleCamera : Camera {
     glm::mat4 m_offset;
     glm::mat4 m_rotation;
-    bool m_dirty = true;
+    bool m_dirty;
 
     void mouseMoved(glm::vec2 delta) override;
     void update(s32 dt) override;
