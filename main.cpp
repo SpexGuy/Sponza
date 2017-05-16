@@ -188,7 +188,7 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode, int act
         }
     } else if (key == GLFW_KEY_M) {
         renderMode++;
-        if (renderMode >= kDiffuseTex) {
+        if (renderMode > kDiffuseTex) {
             renderMode = 0;
         }
     } else if (key == GLFW_KEY_P) {

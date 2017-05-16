@@ -13,8 +13,6 @@
 enum : u16 {
     kTexCoord,
     kNormal,
-    kTangent,
-    kBitangent,
     kDiffuseTex,
     kSpecularTex,
     kDiffuseAlphaTex,
