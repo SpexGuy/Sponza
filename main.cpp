@@ -149,7 +149,7 @@ void draw(s32 dt) {
     } else {
         MeshPart &mp = mesh.parts[part];
         Material &mat = mesh.materials[mp.material];
-        u16 shader = renderMode == 2 ? mp.shader : u16(renderMode);
+        u16 shader = renderMode == kDiffuseTex ? mp.shader : u16(renderMode);
         bindShader(shader);
         bindMaterial(mvp, camPos, lightPos, mesh, mat);
         glDrawElements(GL_TRIANGLES, mp.size, GL_UNSIGNED_INT, (void *)(mp.offset * sizeof(u32)));

@@ -13,10 +13,15 @@
 enum : u16 {
     kTexCoord,
     kNormal,
+    kBumpTex,
     kDiffuseTex,
     kSpecularTex,
     kDiffuseAlphaTex,
     kSpecularAlphaTex,
+    kDiffuseBumpTex,
+    kSpecularBumpTex,
+    kDiffuseAlphaBumpTex,
+    kSpecularAlphaBumpTex,
 
     kNumShaders
 };

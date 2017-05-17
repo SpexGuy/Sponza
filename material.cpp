@@ -409,15 +409,15 @@ void initShaders() {
 
     initShader(kTexCoord, fTexCoordColor);
     initShader(kNormal, fNormalColor);
-//    initShader(kBumpTex, fNormalColor | fNormalTangentTex);
+    initShader(kBumpTex, fNormalColor | fNormalTangentTex);
     initShader(kDiffuseTex, fAmbientTex | fDiffuseTex);
     initShader(kSpecularTex, fAmbientTex | fDiffuseTex | fSpecularTex);
     initShader(kDiffuseAlphaTex, fAmbientTex | fDiffuseTex | fTransparencyTex);
     initShader(kSpecularAlphaTex, fAmbientTex | fDiffuseTex | fSpecularTex | fTransparencyTex);
-//    initShader(kDiffuseBumpTex, fAmbientTex | fDiffuseTex | fNormalTangentTex);
-//    initShader(kSpecularBumpTex, fAmbientTex | fDiffuseTex | fSpecularTex | fNormalTangentTex);
-//    initShader(kDiffuseAlphaBumpTex, fAmbientTex | fDiffuseTex | fTransparencyTex | fNormalTangentTex);
-//    initShader(kSpecularAlphaBumpTex, fAmbientTex | fDiffuseTex | fSpecularTex | fTransparencyTex | fNormalTangentTex);
+    initShader(kDiffuseBumpTex, fAmbientTex | fDiffuseTex | fNormalTangentTex);
+    initShader(kSpecularBumpTex, fAmbientTex | fDiffuseTex | fSpecularTex | fNormalTangentTex);
+    initShader(kDiffuseAlphaBumpTex, fAmbientTex | fDiffuseTex | fTransparencyTex | fNormalTangentTex);
+    initShader(kSpecularAlphaBumpTex, fAmbientTex | fDiffuseTex | fSpecularTex | fTransparencyTex | fNormalTangentTex);
 
     bindShader(kTexCoord);
 
@@ -440,11 +440,19 @@ u16 findShader(const Mesh &mesh, const Material &material) {
     bool kd = (material.flags & MAT_DIFFUSE_TEX) != 0;
     bool ks = (material.flags & MAT_SPECULAR_TEX) != 0;
     bool d  = (material.flags & MAT_TRANSPARENCY_TEX) != 0;
+    bool bump = (material.flags & MAT_NORMAL_TANGENT_TEX) != 0;
 
     if (ka && !validTexture(mesh, material.map_Ka)) return kNormal;
     if (kd && !validTexture(mesh, material.map_Kd)) return kNormal;
     if (ks && !validTexture(mesh, material.map_Ks)) return kNormal;
     if (d && !validTexture(mesh, material.map_d)) return kNormal;
+    if (bump && !validTexture(mesh, material.map_bump)) return kNormal;
+
+    if (bump && ka && kd && ks && d) return kSpecularAlphaBumpTex;
+    else if (bump && ka && kd && ks) return kSpecularBumpTex;
+    else if (bump && ka && kd && d) return kDiffuseAlphaBumpTex;
+    else if (bump && ka && kd) return kDiffuseBumpTex;
+    else if (bump) return kNormal; // error
 
     if (ka && kd && ks && d) return kSpecularAlphaTex;
     else if (ka && kd && d) return kDiffuseAlphaTex;
