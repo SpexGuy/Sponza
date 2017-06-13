@@ -156,6 +156,10 @@ void bufferObjVertexData(const OBJMesh &obj) {
 
         vec3 tan = cross(pv, normal);
         vec3 btn = cross(normal, pu);
+        if (dot(tan, pu) < 0) {
+            tan = -tan;
+            btn = -btn;
+        }
         assert(!any(isnan(tan)));
         assert(!any(isnan(btn)));
 
